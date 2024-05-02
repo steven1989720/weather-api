@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Weather Service</title>
+    <!-- Bootstrap CSS -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        th, .table-align-center{
+            text-align: center;
+        }
+        
+        td, .label-right{
+            text-align: right;
+        }
+
+        .btn {
+            width: 100%;
+        }
+
+        .utc {
+            font-size: large;
+        }
+        @media screen and (max-width: 576px) {
+            .label-right {
+                text-align: left;
+            }
+        }
+        .loading-overlay {
+            position: fixed; /* Fixed position to keep it in place even when scrolling */
+            top: 50%; /* Position the top edge of the element in the middle of the screen */
+            left: 50%; /* Position the left edge of the element in the middle of the screen */
+            transform: translate(-50%, -50%); /* Offset the element to the actual center */
+            z-index: 1000; /* Ensure it's above other content */
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="text-center">Weather Service <span class="utc" id="utc">(UTC +3)</span></h1>
+        <form id="weatherForm">
+            <div class="form-group row">
+                <label for="location" class="col-sm-2 col-form-label label-right">Location:</label>
+                <div class="col-sm-2">
+                    <input type="text" class="form-control" id="location" name="location" placeholder="Enter location">
+                </div>
+                <label for="time" class="col-sm-2 col-form-label label-right">Time:</label>
+                <div class="col-sm-2">
+                    <input type="number" class="form-control" id="time" name="time" placeholder="0~24" min="0" max="24">
+                </div>
+                <div class="col-sm-4 btn-get">
+                    <button type="submit" class="btn btn-primary">Get Weather From Location</button>
+                </div>
+            </div>
+        </form>
+        <form id="coordinateForm">
+            <div class="form-group row">
+                <label for="latitude" class="col-sm-2 col-form-label label-right">Latitude:</label>
+                <div class="col-sm-2">
+                    <input type="number" class="form-control" id="latitude" name="latitude" placeholder="-90 ~ 90" min="-90" max="90" step="any">
+                </div>
+                <label for="longitude" class="col-sm-2 col-form-label label-right">Longitude:</label>
+                <div class="col-sm-2">
+                    <input type="number" class="form-control" id="longitude" name="longitude" placeholder="-180 ~ 180" min="-180" max="180" step="any">
+                </div>
+                <div class="col-sm-4 btn-get">
+                    <button type="submit" class="btn btn-primary">Get Weather From Coordinates</button>
+                </div>
+            </div>
+        </form>
+        <div id="weatherResult">
+            <table class="table table-bordered">
+                <thead><tr><th>Date</th><th>Temperature (°C)</th><th>Air pressure (hPa)</th><th>Cloud (%)</th><th>Relative Humidity (%)</th><th>Wind (m/s)</th></tr></thead>
+            </table>
+        </div>
+    </div>
+    <div class="loading-overlay">
+        <img id="loading" src="./loading.svg" style="display:none;" alt="Loading..."/>
+    </div>
+
+    <!-- Bootstrap JS (optional) -->
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+        const form = document.getElementById('weatherForm');
+        const formcoor = document.getElementById('coordinateForm');
+        const resultDiv = document.getElementById('weatherResult');
+        
+        form.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            const location = document.getElementById('location').value;
+            const time = document.getElementById('time').value || "14";
+
+            if (location == "") {
+                alert('Location must be filled.');
+                return;
+            }
+            if (isNaN(time) || parseInt(time) < 0 || parseInt(time) > 24) {
+                alert('Time must be between 0 and 24 hour.');
+                return;
+            }
+
+            adjustButtons(false);
+            try {
+                const response = await fetch(`/api/weather/city/${location}?time=${time}`);
+                const data = await response.json();
+                resultDiv.innerHTML = outputResult(data);
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Incorrect Location.');
+            } finally {
+            }
+            adjustButtons(true);
+        });
+    
+        formcoor.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            const latitude = document.getElementById('latitude').value;
+            const longitude = document.getElementById('longitude').value;
+            const time = document.getElementById('time').value || "14";
+            document.getElementById('location').value = "";
+            const latitudeValue = parseFloat(latitude);
+            if (isNaN(latitudeValue) || latitudeValue < -90 || latitudeValue > 90) {
+                alert('Latitude must be between -90 and 90 degrees.');
+                return;
+            }
+            const longitudeValue = parseFloat(longitude);
+            if (isNaN(longitudeValue) || longitudeValue < -180 || longitudeValue > 180) {
+                alert('Longitude must be between -180 and 180 degrees.');
+                return;
+            }
+
+            adjustButtons(false);
+            try {
+                const response = await fetch(`/api/weather/coordinates/${latitude},${longitude}?time=${time}`);
+                const data = await response.json();
+                resultDiv.innerHTML = outputResult(data);
+            } catch (error) {
+                console.error('Error:', error);
+            } finally {
+            }
+            adjustButtons(true);
+        });
+
+        function adjustButtons(enable){
+            if (enable){
+                $('#loading').hide();
+                document.querySelector('#weatherForm button[type="submit"]').removeAttribute('disabled');
+                document.querySelector('#coordinateForm button[type="submit"]').removeAttribute('disabled');
+            } else {
+                $('#loading').show();
+                document.querySelector('#weatherForm button[type="submit"]').setAttribute('disabled', 'disabled');
+                document.querySelector('#coordinateForm button[type="submit"]').setAttribute('disabled', 'disabled');
+            }
+        }
+
+        function outputResult(data) {
+            let output = '<table class="table table-bordered">';
+            output += '<thead><tr><th>Date</th><th>Temperature (°C)</th><th>Air pressure (hPa)</th><th>Cloud (%)</th><th>Relative Humidity (%)</th><th>Wind (m/s)</th></tr></thead>';
+            output += '<tbody>';
+            // console.log(data);
+            const weatherData = data[0].weatherData;
+            const lat = data[1].latitude;
+            const lon = data[2].longitude;
+            const utc = data[3].timezone;
+            // console.log(lat, lon);
+            weatherData.forEach(element => {
+                output += `<tr><td class="table-align-center">${element["time"]}</td><td>${element["data"].instant.details["air_temperature"]}</td>`;
+                output += `<td>${element["data"].instant.details["air_pressure_at_sea_level"]}</td>`;
+                output += `<td>${element["data"].instant.details["cloud_area_fraction"]}</td>`;
+                output += `<td>${element["data"].instant.details["relative_humidity"]}</td>`;
+                output += `<td>${element["data"].instant.details["wind_speed"]}</td>`;
+            });
+            output += '</tbody></table>';
+            document.getElementById('latitude').value = lat;
+            document.getElementById('longitude').value = lon;
+            document.getElementById('utc').innerHTML = `(UTC ${utc})`;
+            return output;
+        }
+
+        async function initialize() {
+            document.getElementById('location').value = "Moscow";
+            document.getElementById('time').value = "14";
+            document.getElementById('latitude').value = "55.76";
+            document.getElementById('longitude').value = "37.6";
+
+            adjustButtons(false);
+
+            const response = await fetch(`/api/weather/coordinates/55.76,37.6?time=14`);
+            const data = await response.json();
+            resultDiv.innerHTML = outputResult(data);
+
+            adjustButtons(true);
+        }
+
+        window.addEventListener('load', initialize);
+    </script>
+</body>
+</html>
